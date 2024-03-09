@@ -1,11 +1,22 @@
 import cv2
 import numpy as np
 import pandas as pd
+import tifffile as tif
 from skimage.measure import regionprops
+from sklearn.neighbors import KNeighborsClassifier
+
+NEGATIVE_SAMPLES = ['maddi_1_090', 'bank_2_026', 'boffel_2_159', 'bank_6_116', 'boffel_4_095', 'guld_5_114']
+TRAINING_FEATURES = ['area', 'solidity', 'axis_major_length', 'axis_minor_length']
+SMALL_BUG_THRESHOLD = 1000
 
 
-def get_features():
-    return ['class', 'area', 'solidity', 'axis_major_length', 'axis_minor_length']
+def fit_knn(csv_path, n_neighbors: int) -> KNeighborsClassifier:
+    df = pd.read_csv(csv_path)
+    y = df["class"]
+    X = df[TRAINING_FEATURES]
+    knn = KNeighborsClassifier(n_neighbors=n_neighbors)
+    knn.fit(X, y)
+    return knn
 
 
 def segment_bugs(image: np.ndarray, threshold: int = 30):
@@ -13,12 +24,26 @@ def segment_bugs(image: np.ndarray, threshold: int = 30):
     return np.array(image > threshold).astype(int)
 
 
-def extract_features(mask: np.ndarray, image: np.ndarray, a_class: str) -> pd.Series:
+def extract_features(mask: np.ndarray, image: np.ndarray, file_path: str) -> pd.Series:
+    """
+    Compute features from a segmented bug instance and return as a pd.Series
+    Parameters
+    ----------
+    mask: np.ndarray
+        Binary mask identifying the bug
+    image: np.ndarray
+        Bug image
+    file_path:
+        Full path to this bug image. Used to extract class and case name.
+
+    Returns
+    -------
+    A pd.Series containing fields class, case, centroid, and all features defined by TRAINING_FEATURES
+    """
     r = regionprops(mask, intensity_image=image)
-    my_features = get_features()
-    my_features.remove('class')
-    my_dict = {'class': a_class}
-    for f in my_features:
+    *_, a_class, file_name = file_path.split("/")
+    my_dict = {'class': a_class.lower(), 'case': file_name, 'centroid': r[0]['centroid']}
+    for f in TRAINING_FEATURES:
         my_dict[f] = r[0][f]
 
     return pd.Series(my_dict)
@@ -44,3 +69,7 @@ def load_volume(file_path: str) -> np.ndarray:
         raise ValueError(f"Could not read file: {file_path}")
 
     return np.array(image)
+
+
+def save_volume(image: np.ndarray, path: str):
+    tif.imwrite(path, image)

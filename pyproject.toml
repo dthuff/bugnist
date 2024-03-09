@@ -12,6 +12,8 @@ torch = "^2.2.1"
 scikit-image = "^0.22.0"
 pandas = "^2.2.1"
 tqdm = "^4.66.2"
+scikit-learn = "^1.4.1.post1"
+tifffile = "^2024.2.12"
 
 
 [build-system]
