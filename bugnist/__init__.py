@@ -4,22 +4,28 @@ import pandas as pd
 import tifffile as tif
 from skimage.measure import regionprops
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
 
 NEGATIVE_SAMPLES = ['maddi_1_090', 'bank_2_026', 'boffel_2_159', 'bank_6_116', 'boffel_4_095', 'guld_5_114']
-TRAINING_FEATURES = ['area', 'solidity', 'axis_major_length', 'axis_minor_length']
+TRAINING_FEATURES = ['area', 'solidity', 'extent', 'intensity_max', 'intensity_mean', 'axis_major_length', 'axis_minor_length']
 SMALL_BUG_THRESHOLD = 1000
+BUG_INTENSITY_THRESHOLD = 50
+BUG_DISTANCE_MAP_THRESHOLD = 3
+MINIMUM_MARKER_SIZE = 10
 
 
-def fit_knn(csv_path, n_neighbors: int) -> KNeighborsClassifier:
+def fit_knn(csv_path, n_neighbors: int) -> tuple[KNeighborsClassifier, StandardScaler]:
     df = pd.read_csv(csv_path)
     y = df["class"]
     X = df[TRAINING_FEATURES]
-    knn = KNeighborsClassifier(n_neighbors=n_neighbors)
-    knn.fit(X, y)
-    return knn
+    scaler = StandardScaler()
+    scaler.fit(X)
+    knn = KNeighborsClassifier(n_neighbors=n_neighbors, weights='distance')
+    knn.fit(scaler.transform(X), y)
+    return knn, scaler
 
 
-def segment_bugs(image: np.ndarray, threshold: int = 30):
+def segment_bugs(image: np.ndarray, threshold: int = BUG_INTENSITY_THRESHOLD):
     # Segment one or more bug instances given an input image volume
     return np.array(image > threshold).astype(int)
 

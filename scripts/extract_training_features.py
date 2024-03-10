@@ -19,7 +19,7 @@ def parse_cl_args():
 if __name__ == "__main__":
     cl_args = parse_cl_args()
 
-    columns = ['case', 'class'] + TRAINING_FEATURES
+    columns = ['case', 'class', 'centroid'] + TRAINING_FEATURES
     df = pd.DataFrame(columns=columns)
     list_of_dirs = [f for f in os.listdir(cl_args.data_root) if os.path.isdir(os.path.join(cl_args.data_root, f))]
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
         for a_file in tqdm(tif_glob):
             if not [True for f in NEGATIVE_SAMPLES if f in a_file]:
                 bug_img = load_volume(a_file)
-                bug_segm = segment_bugs(bug_img, 30)
+                bug_segm = segment_bugs(bug_img)
                 if np.any(bug_segm):
                     row = extract_features(bug_segm, bug_img, a_file)
                     df.loc[len(df)] = row
