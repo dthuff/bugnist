@@ -1,22 +1,16 @@
 import argparse
 import os
-import time
 from glob import glob
 
 import numpy as np
 import pandas as pd
-from scipy.ndimage import generate_binary_structure, iterate_structure
-from skimage.measure import label
-from skimage.morphology import binary_erosion, dilation, remove_small_objects, remove_small_holes, binary_closing
 from scipy import ndimage as ndi
-
+from skimage.measure import label
+from skimage.morphology import remove_small_objects
 from skimage.segmentation import watershed
-from skimage.feature import peak_local_max
 
-from bugnist import load_volume, segment_bugs, extract_features, SMALL_BUG_THRESHOLD, TRAINING_FEATURES, \
-    BUG_INTENSITY_THRESHOLD, BUG_DISTANCE_MAP_THRESHOLD, MINIMUM_MARKER_SIZE, fit_knn, save_volume
-
-STRUCT = iterate_structure(generate_binary_structure(3, 1), 2)
+from bugnist import load_volume, segment_bugs, extract_features, TRAINING_FEATURES, fit_knn, save_volume
+from bugnist.constants import BUG_INTENSITY_THRESHOLD, BUG_DISTANCE_MAP_THRESHOLD, MINIMUM_MARKER_SIZE
 
 
 def parse_cl_args():
@@ -42,18 +36,22 @@ if __name__ == "__main__":
     for test_image in test_images:
         img = load_volume(test_image)
 
-        # Initial segmentation and clean up of all bugs
-        bugs_mask = segment_bugs(img, BUG_INTENSITY_THRESHOLD)
-        bugs_mask = remove_small_objects(bugs_mask, SMALL_BUG_THRESHOLD)
-        bugs_mask = remove_small_holes(bugs_mask, 50000)
+        found_some_bugs = False
+        while not found_some_bugs:
+            # Initial segmentation and clean up of all bugs
+            bugs_mask = segment_bugs(img, BUG_INTENSITY_THRESHOLD)
 
-        # Watershed to separate bugs
-        distance = ndi.distance_transform_edt(bugs_mask)
-        distance_thresholded = distance > BUG_DISTANCE_MAP_THRESHOLD
-        markers = label(distance_thresholded)
-        markers = remove_small_objects(markers, MINIMUM_MARKER_SIZE)
-        bugs_labelled = watershed(-distance, markers, mask=bugs_mask)
-        save_volume(bugs_labelled.astype('uint8'), test_image.replace(".tif", "_labelled.tif"))
+            # Watershed to separate bugs
+            distance = ndi.distance_transform_edt(bugs_mask)
+            distance_thresholded = distance > BUG_DISTANCE_MAP_THRESHOLD
+            markers = label(distance_thresholded)
+            markers = remove_small_objects(markers, MINIMUM_MARKER_SIZE)
+            bugs_labelled = watershed(-distance, markers, mask=bugs_mask)
+            if np.sum(bugs_labelled) > 0:
+                found_some_bugs = True
+                save_volume(bugs_labelled.astype('uint8'), test_image.replace(".tif", "_labelled.tif"))
+            else:
+                BUG_INTENSITY_THRESHOLD -= 10  # If we didn't find any bugs, lower the threshold and try again
 
         if cl_args.debug:  # Extra saving to debug watershed segmentation
             save_volume(distance.astype('uint8'), test_image.replace(".tif", "_distance.tif"))
@@ -72,8 +70,8 @@ if __name__ == "__main__":
 
             # Append to centerpoint string using kNN assigned class and centroid from feature representation
             this_centerpoint_string = (f"{predicted_class[0]};"
-                                       f"{round(features_for_this_bug['centroid'][1], 2)};"
                                        f"{round(features_for_this_bug['centroid'][2], 2)};"
+                                       f"{round(features_for_this_bug['centroid'][1], 2)};"
                                        f"{round(features_for_this_bug['centroid'][0], 2)};")
             centerpoints_string += this_centerpoint_string
 
